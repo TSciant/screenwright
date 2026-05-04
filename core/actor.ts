@@ -107,6 +107,9 @@ export class Actor {
             swipeyRef.current.dunkItem({ targetX: 200, targetY: -400 });
           }
         }
+        // After throw/dunk animation starts, clear the held item from state
+        // so the renderer drops it via AnimatePresence exit
+        this.state.holding = null;
         this.onTrick?.(trick);
         break;
       case 'morph':
