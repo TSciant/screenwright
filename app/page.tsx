@@ -4,13 +4,15 @@
  * Demo page — Shows the Stage + Actor + Director system in action.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Stage } from '../core/stage';
 import { Actor } from '../core/actor';
 import { Director, Scene } from '../core/director';
 import StageView from '../components/StageView';
+import Swipey, { SwipeyRef } from '../components/Swipey';
 
 export default function DemoPage() {
+  const swipeyRef = useRef<SwipeyRef>(null);
   const [stage] = useState(() => new Stage({
     width: 800,
     height: 600,
@@ -41,6 +43,13 @@ export default function DemoPage() {
         y: 0.5,
         scale: 1,
         visible: true,
+      },
+      onTrick: (trick) => {
+        if (trick === 'throw') {
+          swipeyRef.current?.throwItem({ targetX: 300, targetY: -200 });
+        } else if (trick === 'dunk') {
+          swipeyRef.current?.dunkItem({ targetX: 200, targetY: -400 });
+        }
       },
     });
 
@@ -203,6 +212,28 @@ export default function DemoPage() {
                     {item || '✕'}
                   </button>
                 ))}
+              </div>
+            </div>
+
+            <div className="bg-gray-900/50 rounded-xl p-4 border border-gray-800">
+              <h2 className="font-semibold mb-2">Actions</h2>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => {
+                    director.signal('swipey-1', { type: 'trick', payload: 'throw' });
+                  }}
+                  className="px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded text-sm font-medium"
+                >
+                  🎯 Throw
+                </button>
+                <button
+                  onClick={() => {
+                    director.signal('swipey-1', { type: 'trick', payload: 'dunk' });
+                  }}
+                  className="px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded text-sm font-medium"
+                >
+                  🏀 Dunk
+                </button>
               </div>
             </div>
           </div>
