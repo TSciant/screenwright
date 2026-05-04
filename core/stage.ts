@@ -48,6 +48,12 @@ export class Stage {
   /** Subscribe to render updates (gets called every frame) */
   subscribe(fn: (actors: ActorState[]) => void): () => void {
     this.subscribers.add(fn);
+    // Emit current state immediately
+    const states: ActorState[] = [];
+    this.actors.forEach((actor) => {
+      states.push(actor.getRenderState());
+    });
+    fn(states);
     return () => this.subscribers.delete(fn);
   }
 
