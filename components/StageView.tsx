@@ -8,10 +8,9 @@
  */
 
 import React, { useEffect, useState, useRef } from 'react';
-import { motion } from 'framer-motion';
 import { Stage } from '../core/stage';
 import { ActorState } from '../core/actor';
-import Swipey from './Swipey';
+import ActorView from './ActorView';
 
 interface StageViewProps {
   stage: Stage;
@@ -57,44 +56,7 @@ export default function StageView({ stage, className = '' }: StageViewProps) {
     >
       {actors.map((actor) => {
         const pos = stage.toPixels(actor.x, actor.y);
-        return (
-          <motion.div
-            key={actor.id}
-            initial={false}
-            animate={{
-              x: pos.x,
-              y: pos.y,
-              rotate: actor.rotation,
-              scale: actor.scale,
-              opacity: actor.visible ? actor.opacity : 0,
-            }}
-            transition={{
-              type: 'spring',
-              stiffness: 120,
-              damping: 20,
-              mass: 1,
-            }}
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              translateX: '-50%',
-              translateY: '-50%',
-              pointerEvents: 'none',
-              willChange: 'transform',
-            }}
-          >
-            {actor.type === 'swipey' && (
-              <Swipey
-                emotion={actor.emotion as any}
-                size={80 * actor.scale}
-                holding={actor.holding}
-                holdPosition={actor.holdPosition as any}
-                morph={actor.morph}
-              />
-            )}
-          </motion.div>
-        );
+        return <ActorView key={actor.id} actor={actor} pos={pos} />;
       })}
     </div>
   );
