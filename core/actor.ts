@@ -102,14 +102,19 @@ export class Actor {
         const swipeyRef = getSwipeyRef(this.state.id);
         if (swipeyRef?.current) {
           if (trick === 'throw') {
-            swipeyRef.current.throwItem({ targetX: 300, targetY: -200 });
+            swipeyRef.current.throwItem({
+              targetX: 300,
+              targetY: -200,
+              onComplete: () => { this.state.holding = null; },
+            });
           } else if (trick === 'dunk') {
-            swipeyRef.current.dunkItem({ targetX: 200, targetY: -400 });
+            swipeyRef.current.dunkItem({
+              targetX: 200,
+              targetY: -400,
+              onComplete: () => { this.state.holding = null; },
+            });
           }
         }
-        // After throw/dunk animation starts, clear the held item from state
-        // so the renderer drops it via AnimatePresence exit
-        this.state.holding = null;
         this.onTrick?.(trick);
         break;
       case 'morph':
