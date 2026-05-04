@@ -3,15 +3,14 @@
 /**
  * Swipey — The character component.
  *
- * Pure rendering. No state management, no animation logic.
- * Receives emotion, holding, morph, and renders accordingly.
- *
- * Animation is handled by Framer Motion based on prop changes.
+ * Pure rendering with smooth Framer Motion transitions.
+ * Supports throw arcs via physics engine integration.
  */
 
-import React from 'react';
+import React, { useRef, useImperativeHandle, forwardRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getColorForEmotion, eyeIcons, mouthShapes, EmotionType } from './Swipey/constants';
+import { SwipeyPhysicsEngine } from '../physics/physics.engine';
 
 interface SwipeyProps {
   emotion?: EmotionType;
@@ -21,96 +20,76 @@ interface SwipeyProps {
   morph?: string | null;
 }
 
-export default function Swipey({
+export interface SwipeyRef {
+  throwItem: (options?: ThrowOptions) => Promise<void>;
+  dunkItem: (options?: ThrowOptions) => Promise<void>;
+}
+
+interface ThrowOptions {
+  targetX?: number;
+  targetY?: number;
+  arcType?: 'arc' | 'parabola' | 'straight' | 'bounce' | 'spiral';
+  onComplete?: () => void;
+}
+
+const Swipey = forwardRef<SwipeyRef, SwipeyProps>(function Swipey({
   emotion = 'idle',
   size = 80,
   holding = null,
   holdPosition = 'topRight',
   morph = null,
-}: SwipeyProps) {
+}, ref) {
   const color = getColorForEmotion(emotion);
   const [leftEye, rightEye] = eyeIcons[emotion] || eyeIcons.idle;
   const mouth = mouthShapes[emotion] || mouthShapes.idle;
+  const itemRef = useRef<HTMLDivElement>(null);
 
-  // Determine what to render (morph overrides face)
-  const renderContent = () => {
-    if (morph) {
-      return (
-        <motion.div
-          key={`morph-${morph}`}
-          initial={{ scale: 0, rotate: -180 }}
-          animate={{ scale: 1, rotate: 0 }}
-          transition={{ type: 'spring', stiffness: 260, damping: 20 }}
-          style={{ fontSize: size * 0.7 }}
-        >
-          {morph}
-        </motion.div>
+  // Imperative handle for throw/dunk animations
+  useImperativeHandle(ref, () => ({
+    async throwItem(options = {}) {
+      if (!itemRef.current || !holding) return;
+      const physics = new SwipeyPhysicsEngine({ gravity: 0.5 });
+      const path = physics.calculateThrowArc(
+        0, 0,
+        options.targetX || 300, options.targetY || -200,
+        options.arcType || 'arc'
       );
-    }
+      // Animate through path points
+      for (const point of path) {
+        if (itemRef.current) {
+          itemRef.current.style.transform = `translate(${point.x}px, ${point.y}px)`;
+        }
+        await new Promise((r) => setTimeout(r, 16));
+      }
+      options.onComplete?.();
+    },
+    async dunkItem(options = {}) {
+      // Dunk = throw up with high arc
+      return (this as any).throwItem({
+        ...options,
+        targetY: -400,
+        arcType: 'parabola',
+      });
+    },
+  }));
 
-    return (
-      <motion.div
-        className="flex flex-col items-center justify-center"
-        initial={false}
-        animate={{
-          scale: [1, 1.05, 1],
-        }}
-        transition={{
-          duration: 2,
-          repeat: Infinity,
-          ease: 'easeInOut',
-        }}
-      >
-        {/* Eyes */}
-        <div className="flex gap-1 text-white" style={{ fontSize: size * 0.25 }}>
-          <motion.span
-            key={`eye-l-${emotion}`}
-            initial={{ scaleY: 0 }}
-            animate={{ scaleY: 1 }}
-            transition={{ duration: 0.2 }}
-          >
-            {leftEye}
-          </motion.span>
-          <motion.span
-            key={`eye-r-${emotion}`}
-            initial={{ scaleY: 0 }}
-            animate={{ scaleY: 1 }}
-            transition={{ duration: 0.2 }}
-          >
-            {rightEye}
-          </motion.span>
-        </div>
-        {/* Mouth */}
-        <motion.span
-          key={`mouth-${emotion}`}
-          initial={{ scaleX: 0 }}
-          animate={{ scaleX: 1 }}
-          transition={{ duration: 0.3, delay: 0.1 }}
-          className="text-white"
-          style={{ fontSize: size * 0.2 }}
-        >
-          {mouth}
-        </motion.span>
-      </motion.div>
-    );
-  };
-
-  // Get holding position offset
-  const getHoldingOffset = () => {
-    const offset = size * 0.4;
+  // Held item positioning with registration point
+  const getItemTransform = () => {
+    const offset = size * 0.35;
+    const center = size / 2;
     switch (holdPosition) {
-      case 'topLeft': return { top: -offset, left: -offset };
-      case 'topRight': return { top: -offset, right: -offset };
-      case 'bottomLeft': return { bottom: -offset, left: -offset };
-      case 'bottomRight': return { bottom: -offset, right: -offset };
-      case 'center': return { top: 0, left: 0 };
-      default: return { top: -offset, right: -offset };
+      case 'topLeft': return `translate(${center - offset}px, ${center - offset}px) rotate(-15deg)`;
+      case 'topRight': return `translate(${center + offset}px, ${center - offset}px) rotate(15deg)`;
+      case 'bottomLeft': return `translate(${center - offset}px, ${center + offset}px) rotate(-15deg)`;
+      case 'bottomRight': return `translate(${center + offset}px, ${center + offset}px) rotate(15deg)`;
+      case 'center': return `translate(${center}px, ${center}px) rotate(0deg)`;
+      default: return `translate(${center + offset}px, ${center - offset}px) rotate(15deg)`;
     }
   };
 
   return (
     <div
-      className="relative inline-flex items-center justify-center"
+      className="relative"
       style={{ width: size, height: size }}
     >
       {/* Body */}
@@ -122,13 +101,13 @@ export default function Swipey({
           backgroundColor: color,
           boxShadow: `0 0 ${size * 0.3}px ${color}40`,
         }}
-        initial={false}
         animate={{
           boxShadow: [
             `0 0 ${size * 0.3}px ${color}40`,
             `0 0 ${size * 0.5}px ${color}60`,
             `0 0 ${size * 0.3}px ${color}40`,
           ],
+          scale: [1, 1.02, 1],
         }}
         transition={{
           duration: 2,
@@ -136,27 +115,79 @@ export default function Swipey({
           ease: 'easeInOut',
         }}
       >
-        <AnimatePresence mode="wait">
-          {renderContent()}
+        <AnimatePresence mode="wait" initial={false}>
+          {morph ? (
+            <motion.div
+              key={`morph-${morph}`}
+              initial={{ scale: 0, rotate: -180, opacity: 0 }}
+              animate={{ scale: 1, rotate: 0, opacity: 1 }}
+              exit={{ scale: 0, rotate: 180, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+              style={{ fontSize: size * 0.7 }}
+            >
+              {morph}
+            </motion.div>
+          ) : (
+            <motion.div
+              key={`face-${emotion}`}
+              className="flex flex-col items-center justify-center"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              transition={{ duration: 0.15 }}
+            >
+              {/* Eyes */}
+              <div className="flex gap-1 text-white" style={{ fontSize: size * 0.25 }}>
+                <motion.span
+                  animate={{ scaleY: [1, 0.1, 1] }}
+                  transition={{ duration: 0.15, delay: 2, repeat: Infinity, repeatDelay: 3 }}
+                >
+                  {leftEye}
+                </motion.span>
+                <motion.span
+                  animate={{ scaleY: [1, 0.1, 1] }}
+                  transition={{ duration: 0.15, delay: 2, repeat: Infinity, repeatDelay: 3 }}
+                >
+                  {rightEye}
+                </motion.span>
+              </div>
+              {/* Mouth */}
+              <motion.span
+                className="text-white"
+                style={{ fontSize: size * 0.2 }}
+                layout
+              >
+                {mouth}
+              </motion.span>
+            </motion.div>
+          )}
         </AnimatePresence>
       </motion.div>
 
-      {/* Held item */}
+      {/* Held item — positioned with transform registration point */}
       <AnimatePresence>
         {holding && (
           <motion.div
-            key={`hold-${holding}`}
-            className="absolute"
-            style={getHoldingOffset()}
-            initial={{ scale: 0, rotate: -45 }}
-            animate={{ scale: 1, rotate: 0 }}
-            exit={{ scale: 0, rotate: 45 }}
+            ref={itemRef}
+            className="absolute top-0 left-0"
+            style={{
+              fontSize: size * 0.4,
+              transform: getItemTransform(),
+              transformOrigin: 'center center',
+            }}
+            initial={{ scale: 0, rotate: -45, opacity: 0 }}
+            animate={{ scale: 1, rotate: 0, opacity: 1 }}
+            exit={{ scale: 0, rotate: 45, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+            layout
           >
-            <span style={{ fontSize: size * 0.4 }}>{holding}</span>
+            {holding}
           </motion.div>
         )}
       </AnimatePresence>
     </div>
   );
-}
+});
+
+Swipey.displayName = 'Swipey';
+export default Swipey;
