@@ -7,10 +7,9 @@
  * Supports throw arcs via physics engine integration.
  */
 
-import React, { useRef, useImperativeHandle, forwardRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useRef, useImperativeHandle, forwardRef, useCallback } from 'react';
+import { motion, useAnimation, AnimatePresence } from 'framer-motion';
 import { getColorForEmotion, eyeIcons, mouthShapes, EmotionType } from './Swipey/constants';
-import { SwipeyPhysicsEngine } from '../physics/physics.engine';
 
 interface SwipeyProps {
   emotion?: EmotionType;
@@ -42,57 +41,87 @@ const Swipey = forwardRef<SwipeyRef, SwipeyProps>(function Swipey({
   const color = getColorForEmotion(emotion);
   const [leftEye, rightEye] = eyeIcons[emotion] || eyeIcons.idle;
   const mouth = mouthShapes[emotion] || mouthShapes.idle;
-  const itemRef = useRef<HTMLDivElement>(null);
+  const itemAnim = useAnimation();
+  const itemVisible = useRef(true);
+
+  // Compute held item base position (registration point)
+  const getItemBasePosition = useCallback(() => {
+    const offset = size * 0.35;
+    const c = size / 2;
+    switch (holdPosition) {
+      case 'topLeft': return { x: c - offset, y: c - offset, rotate: -15 };
+      case 'topRight': return { x: c + offset, y: c - offset, rotate: 15 };
+      case 'bottomLeft': return { x: c - offset, y: c + offset, rotate: -15 };
+      case 'bottomRight': return { x: c + offset, y: c + offset, rotate: 15 };
+      case 'center': return { x: c, y: c, rotate: 0 };
+      default: return { x: c + offset, y: c - offset, rotate: 15 };
+    }
+  }, [size, holdPosition]);
 
   // Imperative handle for throw/dunk animations
   useImperativeHandle(ref, () => ({
     async throwItem(options = {}) {
-      if (!itemRef.current || !holding) return;
-      const physics = new SwipeyPhysicsEngine({ gravity: 0.5 });
-      const path = physics.calculateThrowArc(
-        0, 0,
-        options.targetX || 300, options.targetY || -200,
-        options.arcType || 'arc'
-      );
-      // Animate through path points
-      for (const point of path) {
-        if (itemRef.current) {
-          itemRef.current.style.transform = `translate(${point.x}px, ${point.y}px)`;
-        }
-        await new Promise((r) => setTimeout(r, 16));
-      }
+      if (!holding) return;
+      itemVisible.current = true;
+      const base = getItemBasePosition();
+      await itemAnim.start({
+        x: base.x + (options.targetX ?? 200),
+        y: base.y + (options.targetY ?? -150),
+        rotate: base.rotate + 360,
+        scale: 0.2,
+        opacity: 0,
+        transition: { duration: 0.8, ease: 'easeIn' },
+      });
+      itemVisible.current = false;
       options.onComplete?.();
     },
     async dunkItem(options = {}) {
-      // Dunk = throw up with high arc
-      return (this as any).throwItem({
-        ...options,
-        targetY: -400,
-        arcType: 'parabola',
+      if (!holding) return;
+      itemVisible.current = true;
+      const base = getItemBasePosition();
+      // Arc up then down
+      await itemAnim.start({
+        x: base.x,
+        y: base.y - 200,
+        rotate: base.rotate + 180,
+        scale: 1.2,
+        transition: { duration: 0.4, ease: 'easeOut' },
       });
+      await itemAnim.start({
+        x: base.x,
+        y: base.y + 100,
+        rotate: base.rotate + 360,
+        scale: 0.3,
+        opacity: 0,
+        transition: { duration: 0.4, ease: 'easeIn' },
+      });
+      itemVisible.current = false;
+      options.onComplete?.();
     },
   }));
 
-  // Held item positioning with registration point
-  const getItemTransform = () => {
-    const offset = size * 0.35;
-    const center = size / 2;
-    switch (holdPosition) {
-      case 'topLeft': return `translate(${center - offset}px, ${center - offset}px) rotate(-15deg)`;
-      case 'topRight': return `translate(${center + offset}px, ${center - offset}px) rotate(15deg)`;
-      case 'bottomLeft': return `translate(${center - offset}px, ${center + offset}px) rotate(-15deg)`;
-      case 'bottomRight': return `translate(${center + offset}px, ${center + offset}px) rotate(15deg)`;
-      case 'center': return `translate(${center}px, ${center}px) rotate(0deg)`;
-      default: return `translate(${center + offset}px, ${center - offset}px) rotate(15deg)`;
+  // Reset item animation when a new item is held
+  React.useEffect(() => {
+    if (holding && itemVisible.current === false) {
+      itemVisible.current = true;
+      const base = getItemBasePosition();
+      itemAnim.set({ x: base.x, y: base.y, rotate: base.rotate, scale: 0, opacity: 0 });
+      itemAnim.start({
+        x: base.x,
+        y: base.y,
+        rotate: base.rotate,
+        scale: 1,
+        opacity: 1,
+        transition: { type: 'spring', stiffness: 300, damping: 20 },
+      });
     }
-  };
+  }, [holding, itemAnim, getItemBasePosition]);
+
+  const basePos = getItemBasePosition();
 
   return (
-    <div
-      className="relative"
-      style={{ width: size, height: size }}
-    >
-      {/* Body */}
+    <div className="relative" style={{ width: size, height: size }}>
+      {/* Body with breathing pulse */}
       <motion.div
         className="rounded-2xl flex items-center justify-center"
         style={{
@@ -107,13 +136,8 @@ const Swipey = forwardRef<SwipeyRef, SwipeyProps>(function Swipey({
             `0 0 ${size * 0.5}px ${color}60`,
             `0 0 ${size * 0.3}px ${color}40`,
           ],
-          scale: [1, 1.02, 1],
         }}
-        transition={{
-          duration: 2,
-          repeat: Infinity,
-          ease: 'easeInOut',
-        }}
+        transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
       >
         <AnimatePresence mode="wait" initial={false}>
           {morph ? (
@@ -130,56 +154,50 @@ const Swipey = forwardRef<SwipeyRef, SwipeyProps>(function Swipey({
           ) : (
             <motion.div
               key={`face-${emotion}`}
-              className="flex flex-col items-center justify-center"
+              className="flex flex-col items-center justify-center gap-1"
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
               transition={{ duration: 0.15 }}
             >
               {/* Eyes */}
-              <div className="flex gap-1 text-white" style={{ fontSize: size * 0.25 }}>
+              <div className="flex gap-2 text-white leading-none" style={{ fontSize: size * 0.28 }}>
                 <motion.span
                   animate={{ scaleY: [1, 0.1, 1] }}
                   transition={{ duration: 0.15, delay: 2, repeat: Infinity, repeatDelay: 3 }}
+                  className="inline-block"
                 >
                   {leftEye}
                 </motion.span>
                 <motion.span
                   animate={{ scaleY: [1, 0.1, 1] }}
                   transition={{ duration: 0.15, delay: 2, repeat: Infinity, repeatDelay: 3 }}
+                  className="inline-block"
                 >
                   {rightEye}
                 </motion.span>
               </div>
               {/* Mouth */}
-              <motion.span
-                className="text-white"
-                style={{ fontSize: size * 0.2 }}
-                layout
+              <span
+                className="text-white leading-none"
+                style={{ fontSize: size * 0.22 }}
               >
                 {mouth}
-              </motion.span>
+              </span>
             </motion.div>
           )}
         </AnimatePresence>
       </motion.div>
 
-      {/* Held item — positioned with transform registration point */}
+      {/* Held item — animated via useAnimation */}
       <AnimatePresence>
         {holding && (
           <motion.div
-            ref={itemRef}
-            className="absolute top-0 left-0"
-            style={{
-              fontSize: size * 0.4,
-              transform: getItemTransform(),
-              transformOrigin: 'center center',
-            }}
-            initial={{ scale: 0, rotate: -45, opacity: 0 }}
-            animate={{ scale: 1, rotate: 0, opacity: 1 }}
-            exit={{ scale: 0, rotate: 45, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-            layout
+            className="absolute top-0 left-0 pointer-events-none"
+            style={{ fontSize: size * 0.45 }}
+            initial={{ scale: 0, opacity: 0, x: basePos.x, y: basePos.y, rotate: basePos.rotate - 45 }}
+            animate={itemAnim}
+            exit={{ scale: 0, opacity: 0, rotate: basePos.rotate + 45 }}
           >
             {holding}
           </motion.div>
