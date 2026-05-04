@@ -20,16 +20,27 @@ export default function DemoPage() {
   const [director] = useState(() => new Director(stage));
   const [playing, setPlaying] = useState(false);
 
+  // Auto-play greeting scene on mount
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      director.play(scenes['greeting']);
+      setPlaying(true);
+      setTimeout(() => setPlaying(false), scenes['greeting'].duration || 2000);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [director]);
+
   // Create actors
   useEffect(() => {
     const swipey = new Actor({
       id: 'swipey-1',
       type: 'swipey',
       initialState: {
-        emotion: 'idle',
-        x: 0.2,
+        emotion: 'happy',
+        x: 0.3,
         y: 0.5,
         scale: 1,
+        visible: true,
       },
     });
 
@@ -37,10 +48,11 @@ export default function DemoPage() {
       id: 'outtie-1',
       type: 'outtie',
       initialState: {
-        emotion: 'happy',
-        x: 0.8,
+        emotion: 'love',
+        x: 0.7,
         y: 0.5,
         scale: 1.2,
+        visible: true,
       },
     });
 
