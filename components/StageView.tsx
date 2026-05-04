@@ -3,12 +3,12 @@
 /**
  * StageView — React component that renders Actors from the Stage.
  *
- * This is the ONLY React component that knows about DOM rendering.
- * It subscribes to the Stage's state stream and renders each Actor
- * as a Swipey (or other actor component).
+ * Uses Framer Motion for GPU-accelerated positioning.
+ * No layout thrashing. Smooth 60fps.
  */
 
 import React, { useEffect, useState, useRef } from 'react';
+import { motion } from 'framer-motion';
 import { Stage } from '../core/stage';
 import { ActorState } from '../core/actor';
 import Swipey from './Swipey';
@@ -23,14 +23,10 @@ export default function StageView({ stage, className = '' }: StageViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Subscribe to stage updates
     const unsubscribe = stage.subscribe((newActors) => {
       setActors(newActors);
     });
-
-    // Start the stage render loop
     stage.play();
-
     return () => {
       unsubscribe();
       stage.stop();
@@ -46,7 +42,6 @@ export default function StageView({ stage, className = '' }: StageViewProps) {
         stage.config.height = rect.height;
       }
     };
-
     updateSize();
     window.addEventListener('resize', updateSize);
     return () => window.removeEventListener('resize', updateSize);
@@ -63,15 +58,30 @@ export default function StageView({ stage, className = '' }: StageViewProps) {
       {actors.map((actor) => {
         const pos = stage.toPixels(actor.x, actor.y);
         return (
-          <div
+          <motion.div
             key={actor.id}
+            initial={false}
+            animate={{
+              x: pos.x,
+              y: pos.y,
+              rotate: actor.rotation,
+              scale: actor.scale,
+              opacity: actor.visible ? actor.opacity : 0,
+            }}
+            transition={{
+              type: 'spring',
+              stiffness: 120,
+              damping: 20,
+              mass: 1,
+            }}
             style={{
               position: 'absolute',
-              left: pos.x,
-              top: pos.y,
-              transform: `translate(-50%, -50%) rotate(${actor.rotation}deg) scale(${actor.scale})`,
-              opacity: actor.opacity,
+              top: 0,
+              left: 0,
+              translateX: '-50%',
+              translateY: '-50%',
               pointerEvents: 'none',
+              willChange: 'transform',
             }}
           >
             {actor.type === 'swipey' && (
@@ -83,7 +93,7 @@ export default function StageView({ stage, className = '' }: StageViewProps) {
                 morph={actor.morph}
               />
             )}
-          </div>
+          </motion.div>
         );
       })}
     </div>
