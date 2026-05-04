@@ -7,6 +7,8 @@
  * Stage renders.
  */
 
+import { getSwipeyRef } from './swipeyRefRegistry';
+
 export interface ActorSignal {
   type: 'emotion' | 'move' | 'hold' | 'throw' | 'trick' | 'morph' | 'speak' | 'physics';
   payload: unknown;
@@ -34,12 +36,15 @@ export interface ActorConfig {
   id: string;
   type?: ActorState['type'];
   initialState: Partial<ActorState>;
+  onTrick?: (trick: string) => void;
 }
 
 export class Actor {
   state: ActorState;
   private signalQueue: ActorSignal[] = [];
   private processing = false;
+
+  private onTrick?: (trick: string) => void;
 
   constructor(config: ActorConfig) {
     this.state = {
@@ -57,6 +62,7 @@ export class Actor {
       visible: true,
       ...config.initialState,
     };
+    this.onTrick = config.onTrick;
   }
 
   /** Receive a signal from the Director */
@@ -90,6 +96,18 @@ export class Actor {
         const hold = sig.payload as { item: string | null; position?: string };
         this.state.holding = hold.item;
         if (hold.position) this.state.holdPosition = hold.position;
+        break;
+      case 'trick':
+        const trick = sig.payload as string;
+        const swipeyRef = getSwipeyRef(this.state.id);
+        if (swipeyRef?.current) {
+          if (trick === 'throw') {
+            swipeyRef.current.throwItem({ targetX: 300, targetY: -200 });
+          } else if (trick === 'dunk') {
+            swipeyRef.current.dunkItem({ targetX: 200, targetY: -400 });
+          }
+        }
+        this.onTrick?.(trick);
         break;
       case 'morph':
         this.state.morph = sig.payload as string;
